@@ -1,10 +1,10 @@
-version: '3.8'
+# Remove the 'version' line entirely and use this:
 
 services:
   nginx:
     build: ./nginx
     ports:
-      - "8080:8080"  # Public entrypoint
+      - "8080:8080"
     environment:
       - PORT=8080
     depends_on:
@@ -13,21 +13,21 @@ services:
     restart: unless-stopped
 
   app_blue:
-    image: ${BLUE_IMAGE}
+    image: ${BLUE_IMAGE:-yimikaade/wonderful:devops-stage-two}
     environment:
-      - RELEASE_ID=${RELEASE_ID_BLUE}
+      - RELEASE_ID=${RELEASE_ID_BLUE:-blue-release-1.0}
       - APP_POOL=blue
       - PORT=3000
     ports:
-      - "8081:3000"  # Blue direct access on 8081
+      - "8081:3000"
     restart: unless-stopped
 
   app_green:
-    image: ${GREEN_IMAGE}
+    image: ${GREEN_IMAGE:-yimikaade/wonderful:devops-stage-two}
     environment:
-      - RELEASE_ID=${RELEASE_ID_GREEN}
+      - RELEASE_ID=${RELEASE_ID_GREEN:-green-release-1.0}
       - APP_POOL=green
       - PORT=3000
     ports:
-      - "8082:3000"  # Green direct access on 8082
+      - "8082:3000"
     restart: unless-stopped
