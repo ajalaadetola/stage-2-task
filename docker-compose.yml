@@ -1,5 +1,3 @@
-# Remove the 'version' line entirely and use this:
-
 services:
   nginx:
     build: ./nginx
@@ -7,15 +5,16 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
+      - ACTIVE_POOL=${ACTIVE_POOL}  # Pass from .env
     depends_on:
       - app_blue
       - app_green
     restart: unless-stopped
 
   app_blue:
-    image: ${BLUE_IMAGE:-yimikaade/wonderful:devops-stage-two}
+    image: ${BLUE_IMAGE}
     environment:
-      - RELEASE_ID=${RELEASE_ID_BLUE:-blue-release-1.0}
+      - RELEASE_ID=${RELEASE_ID_BLUE}
       - APP_POOL=blue
       - PORT=3000
     ports:
@@ -23,9 +22,9 @@ services:
     restart: unless-stopped
 
   app_green:
-    image: ${GREEN_IMAGE:-yimikaade/wonderful:devops-stage-two}
+    image: ${GREEN_IMAGE}
     environment:
-      - RELEASE_ID=${RELEASE_ID_GREEN:-green-release-1.0}
+      - RELEASE_ID=${RELEASE_ID_GREEN}
       - APP_POOL=green
       - PORT=3000
     ports:
