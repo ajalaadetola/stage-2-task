@@ -1,10 +1,23 @@
 #!/bin/sh
-
-# Substitute environment variables in nginx config
 set -e
 
-echo "Starting Nginx configuration..."
-envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+echo "Configuring Nginx with ACTIVE_POOL: ${ACTIVE_POOL}, BACKUP_POOL: ${BACKUP_POOL}"
 
-echo "Nginx configuration completed. Starting Nginx..."
+# Determine backup pool (whichever isn't active)
+if [ "$ACTIVE_POOL" = "blue" ]; then
+    BACKUP_POOL="green"
+else
+    BACKUP_POOL="blue"
+fi
+
+export BACKUP_POOL
+
+# Substitute environment variables
+envsubst '${PORT},${ACTIVE_POOL},${BACKUP_POOL}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+
+echo "Nginx configuration completed:"
+echo "Active: app_${ACTIVE_POOL}:3000"
+echo "Backup: app_${BACKUP_POOL}:3000"
+
+# Start Nginx
 exec "$@"
