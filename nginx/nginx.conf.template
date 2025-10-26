@@ -4,12 +4,15 @@ events {
 
 http {
     upstream app_backend {
-        server app_blue:3000 max_fails=2 fail_timeout=3s;
-        server app_green:3000 backup;
+        # Active pool (dynamically set)
+        server app_${ACTIVE_POOL}:3000 max_fails=2 fail_timeout=3s;
+        
+        # Backup pool (the other one)
+        server app_${BACKUP_POOL}:3000 backup;
     }
 
     server {
-        listen 8080;
+        listen ${PORT};
         
         location / {
             proxy_pass http://app_backend;
