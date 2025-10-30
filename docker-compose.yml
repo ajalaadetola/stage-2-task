@@ -2,13 +2,15 @@ services:
   nginx:
     build: ./nginx
     ports:
-      - "8080:8080"
+      - "${PORT}:${PORT}"
     environment:
-      - PORT=8080
-      - ACTIVE_POOL=${ACTIVE_POOL}  # Pass from .env
+      - PORT=${PORT}
+      - ACTIVE_POOL=${ACTIVE_POOL}
     depends_on:
       - app_blue
       - app_green
+    volumes:
+      - nginx_logs:/var/log/nginx
     restart: unless-stopped
 
   app_blue:
@@ -18,7 +20,7 @@ services:
       - APP_POOL=blue
       - PORT=3000
     ports:
-      - "8081:3000"
+      - "${BLUE_PORT}:3000"
     restart: unless-stopped
 
   app_green:
@@ -28,5 +30,21 @@ services:
       - APP_POOL=green
       - PORT=3000
     ports:
-      - "8082:3000"
+      - "${GREEN_PORT}:3000"
     restart: unless-stopped
+
+  alert_watcher:
+    build: ./alert_watcher
+    environment:
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - ERROR_RATE_THRESHOLD=${ERROR_RATE_THRESHOLD}
+      - WINDOW_SIZE=${WINDOW_SIZE}
+      - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC}
+    volumes:
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+volumes:
+  nginx_logs:
