@@ -76,6 +76,20 @@ def parse_log_line(line):
         logging.debug(f"Failed to parse log line: {e}")
         return None
 
+def wait_for_log_file():
+    """Wait for log file to be created and readable"""
+    while True:
+        if os.path.exists(LOG_FILE):
+            try:
+                with open(LOG_FILE, 'r') as test_file:
+                    return True
+            except (IOError, OSError):
+                logging.info("Log file exists but not readable yet, waiting...")
+                time.sleep(2)
+        else:
+            logging.info(f"Waiting for log file: {LOG_FILE}")
+            time.sleep(2)
+
 def monitor_logs():
     """Monitor Nginx logs for alerts"""
     global current_pool, error_window
@@ -83,9 +97,13 @@ def monitor_logs():
     logging.info("Starting Nginx log monitor...")
     logging.info(f"Config: ERROR_RATE_THRESHOLD={ERROR_RATE_THRESHOLD}%, WINDOW_SIZE={WINDOW_SIZE}")
     
+    # Wait for log file to be available
+    wait_for_log_file()
+    logging.info("Log file is now available, starting monitoring...")
+    
     try:
         with open(LOG_FILE, 'r') as file:
-            # Go to end of file
+            # Go to end of file to only read new entries
             file.seek(0, 2)
             
             while True:
@@ -95,14 +113,11 @@ def monitor_logs():
                     if log_data:
                         process_log_entry(log_data)
                 else:
-                    time.sleep(0.1)
-    except FileNotFoundError:
-        logging.error(f"Log file not found: {LOG_FILE}")
-        time.sleep(5)
-        monitor_logs()
+                    time.sleep(0.1)  # Small delay when no new lines
     except Exception as e:
         logging.error(f"Log monitoring error: {e}")
         time.sleep(5)
+        monitor_logs()  # Restart monitoring
 
 def process_log_entry(log_data):
     """Process a single log entry for alerts"""
