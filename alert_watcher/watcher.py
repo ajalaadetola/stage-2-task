@@ -94,7 +94,8 @@ def send_slack_alert(message, alert_type="failover"):
 def monitor_services():
     global current_pool, error_window, request_count
 
-    nginx_url = f"http://{NGINX_HOST}:{NGINX_PORT}/version"
+    # FIXED: Use NGINX_TARGET directly
+    nginx_url = NGINX_TARGET
     logging.info("🚀 Starting HTTP-based Blue/Green Monitor")
     logging.info(f"Config: ERROR_RATE_THRESHOLD={ERROR_RATE_THRESHOLD}%, WINDOW_SIZE={WINDOW_SIZE}")
     logging.info(f"Nginx target: {nginx_url}")
