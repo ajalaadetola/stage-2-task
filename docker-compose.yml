@@ -4,9 +4,9 @@ services:
   nginx:
     build: ./nginx
     ports:
-      - "${PORT}:80"  # External PORT maps to internal port 80
+      - "${PORT}:80"
     environment:
-      - PORT=80  # Internal nginx port
+      - PORT=80
       - ACTIVE_POOL=${ACTIVE_POOL}
       - BLUE_UPSTREAM=app_blue:3000
       - GREEN_UPSTREAM=app_green:3000
@@ -15,6 +15,8 @@ services:
       - app_green
     volumes:
       - nginx_logs:/var/log/nginx
+    networks:
+      - app-network
     restart: unless-stopped
 
   app_blue:
@@ -25,6 +27,8 @@ services:
       - PORT=3000
     ports:
       - "${BLUE_PORT}:3000"
+    networks:
+      - app-network
     restart: unless-stopped
 
   app_green:
@@ -35,6 +39,8 @@ services:
       - PORT=3000
     ports:
       - "${GREEN_PORT}:3000"
+    networks:
+      - app-network
     restart: unless-stopped
 
   alert_watcher:
@@ -49,7 +55,13 @@ services:
       - nginx_logs:/var/log/nginx
     depends_on:
       - nginx
+    networks:
+      - app-network
     restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   nginx_logs:
