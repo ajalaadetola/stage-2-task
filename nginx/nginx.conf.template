@@ -19,18 +19,25 @@ http {
     # Log to actual file (not stdout)
     access_log /var/log/nginx/access.log blue_green;
 
-    upstream app_backend {
-        server app_${ACTIVE_POOL}:3000 max_fails=2 fail_timeout=3s;
-        server app_${BACKUP_POOL}:3000 backup;
+    upstream blue {
+        server app_blue:3000;
+    }
+
+    upstream green {
+        server app_green:3000;
     }
 
     server {
         listen ${PORT};
         
+        # Health check endpoint for alert_watcher
+        location /version {
+            add_header Content-Type text/plain;
+            return 200 "nginx-blue-green-1.0\n";
+        }
+
         location / {
-            proxy_pass http://app_backend;
-            proxy_pass_header X-App-Pool;
-            proxy_pass_header X-Release-Id;
+            proxy_pass http://${ACTIVE_POOL};
             proxy_connect_timeout 2s;
             proxy_send_timeout 3s;
             proxy_read_timeout 3s;
