@@ -16,13 +16,11 @@ http {
                           'uri=$request_uri|'
                           'client_ip=$remote_addr';
 
+    # Log to actual file (not stdout)
     access_log /var/log/nginx/access.log blue_green;
 
     upstream app_backend {
-        # Active pool (dynamically set)
         server app_${ACTIVE_POOL}:3000 max_fails=2 fail_timeout=3s;
-        
-        # Backup pool (the other one)
         server app_${BACKUP_POOL}:3000 backup;
     }
 
@@ -31,32 +29,18 @@ http {
         
         location / {
             proxy_pass http://app_backend;
-            
-            # Preserve application headers
             proxy_pass_header X-App-Pool;
             proxy_pass_header X-Release-Id;
-            
-            # Fast timeouts for quick failover
             proxy_connect_timeout 2s;
             proxy_send_timeout 3s;
             proxy_read_timeout 3s;
-            
-            # Retry configuration for automatic failover
             proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
             proxy_next_upstream_tries 2;
             proxy_next_upstream_timeout 5s;
-            
-            # Forward client headers
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
-        # Health check endpoint (optional but useful)
-        location /healthz {
-            proxy_pass http://app_backend/healthz;
-            access_log off;
         }
     }
 }
