@@ -76,48 +76,50 @@ def parse_log_line(line):
         logging.debug(f"Failed to parse log line: {e}")
         return None
 
-def wait_for_log_file():
-    """Wait for log file to be created and readable"""
-    while True:
-        if os.path.exists(LOG_FILE):
-            try:
-                with open(LOG_FILE, 'r') as test_file:
-                    return True
-            except (IOError, OSError):
-                logging.info("Log file exists but not readable yet, waiting...")
-                time.sleep(2)
-        else:
-            logging.info(f"Waiting for log file: {LOG_FILE}")
-            time.sleep(2)
-
-def monitor_logs():
-    """Monitor Nginx logs for alerts"""
+def monitor_logs_tail():
+    """Monitor logs using tail-like approach (no seeking)"""
     global current_pool, error_window
     
-    logging.info("Starting Nginx log monitor...")
+    logging.info("Starting Nginx log monitor (tail mode)...")
     logging.info(f"Config: ERROR_RATE_THRESHOLD={ERROR_RATE_THRESHOLD}%, WINDOW_SIZE={WINDOW_SIZE}")
     
-    # Wait for log file to be available
-    wait_for_log_file()
-    logging.info("Log file is now available, starting monitoring...")
+    buffer = ""
     
-    try:
-        with open(LOG_FILE, 'r') as file:
-            # Go to end of file to only read new entries
-            file.seek(0, 2)
-            
-            while True:
-                line = file.readline()
-                if line:
-                    log_data = parse_log_line(line)
-                    if log_data:
-                        process_log_entry(log_data)
-                else:
-                    time.sleep(0.1)  # Small delay when no new lines
-    except Exception as e:
-        logging.error(f"Log monitoring error: {e}")
-        time.sleep(5)
-        monitor_logs()  # Restart monitoring
+    while True:
+        try:
+            with open(LOG_FILE, 'r') as file:
+                # Read any existing content first
+                initial_content = file.read()
+                if initial_content:
+                    lines = initial_content.split('\n')
+                    for line in lines:
+                        if line.strip():
+                            log_data = parse_log_line(line)
+                            if log_data:
+                                process_log_entry(log_data)
+                
+                # Now monitor for new lines
+                while True:
+                    chunk = file.read(4096)
+                    if chunk:
+                        buffer += chunk
+                        lines = buffer.split('\n')
+                        # Keep the last incomplete line in buffer
+                        buffer = lines[-1]
+                        
+                        for line in lines[:-1]:
+                            if line.strip():
+                                log_data = parse_log_line(line)
+                                if log_data:
+                                    process_log_entry(log_data)
+                    else:
+                        time.sleep(0.1)
+        except FileNotFoundError:
+            logging.warning(f"Log file not found: {LOG_FILE}. Waiting...")
+            time.sleep(5)
+        except Exception as e:
+            logging.error(f"Log monitoring error: {e}")
+            time.sleep(5)
 
 def process_log_entry(log_data):
     """Process a single log entry for alerts"""
@@ -134,7 +136,8 @@ def process_log_entry(log_data):
         message = f"Failover detected: *{current_pool}* → *{pool}*\n"
         message += f"Time: {log_data['timestamp']}\n"
         message += f"Upstream: {log_data['upstream_addr']}"
-        send_slack_alert(message)
+        if send_slack_alert(message):
+            logging.info(f"Failover alert sent: {current_pool} → {pool}")
     
     current_pool = pool if pool != 'unknown' else current_pool
     
@@ -145,11 +148,13 @@ def process_log_entry(log_data):
             message = f"High error rate detected: *{error_rate:.1f}%* (threshold: {ERROR_RATE_THRESHOLD}%)\n"
             message += f"Sample window: {len(error_window)} requests\n"
             message += f"Current pool: {current_pool}"
-            send_slack_alert(message)
-            # Clear window after alert to avoid spam
-            error_window.clear()
+            if send_slack_alert(message):
+                logging.info(f"Error rate alert sent: {error_rate:.1f}%")
+                # Clear window after alert to avoid spam
+                error_window.clear()
 
 if __name__ == '__main__':
     setup_logging()
-    while True:
-        monitor_logs()
+    # Wait a bit for Nginx to fully start
+    time.sleep(10)
+    monitor_logs_tail()
