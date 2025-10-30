@@ -4,10 +4,12 @@ services:
   nginx:
     build: ./nginx
     ports:
-      - "${PORT}:80"  # Changed to map to internal port 80
+      - "${PORT}:80"  # External PORT maps to internal port 80
     environment:
-      - PORT=80  # Changed to 80
+      - PORT=80  # Internal nginx port
       - ACTIVE_POOL=${ACTIVE_POOL}
+      - BLUE_UPSTREAM=app_blue:3000
+      - GREEN_UPSTREAM=app_green:3000
     depends_on:
       - app_blue
       - app_green
