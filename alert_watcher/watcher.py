@@ -23,7 +23,7 @@ def setup_logging():
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
-def send_slack_alert(message):
+def send_slack_alert(message, alert_type="failover"):
     global last_alert_time
     current_time = time.time()
     
@@ -35,23 +35,66 @@ def send_slack_alert(message):
         logging.error("No SLACK_WEBHOOK_URL configured")
         return False
     
+    # Enhanced message format with better styling
+    if alert_type == "failover":
+        color = "warning"
+        title = "🚨 Failover Detected"
+        icon = ":arrows_counterclockwise:"
+    else:  # error_rate
+        color = "danger" 
+        title = "⚠️ High Error Rate"
+        icon = ":x:"
+    
     payload = {
-        "text": f"🚨 *Blue/Green Alert*\n{message}",
-        "username": "Blue-Green Monitor",
-        "icon_emoji": ":whale:"
+        "text": f"{title}\n{message}",
+        "username": "alert-WATCHER",
+        "icon_emoji": ":whale:",
+        "attachments": [
+            {
+                "color": color,
+                "fields": [
+                    {
+                        "title": "Alert Type",
+                        "value": "Failover" if alert_type == "failover" else "High Error Rate",
+                        "short": True
+                    },
+                    {
+                        "title": "Time", 
+                        "value": time.strftime('%Y-%m-%d %H:%M:%S'),
+                        "short": True
+                    },
+                    {
+                        "title": "Current Pool",
+                        "value": current_pool,
+                        "short": True
+                    },
+                    {
+                        "title": "Requests Monitored",
+                        "value": str(request_count),
+                        "short": True
+                    }
+                ],
+                "footer": "Blue/Green Deployment Monitor",
+                "footer_icon": "https://platform.slack-edge.com/img/default_application_icon.png",
+                "ts": time.time()
+            }
+        ]
     }
     
     try:
         response = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=10)
         if response.status_code == 200:
             last_alert_time = current_time
-            logging.info(f"✅ Alert sent to Slack: {message}")
+            logging.info(f"✅ Alert sent: {message}")
             return True
         else:
-            logging.error(f"Slack error: {response.status_code}")
+            logging.error(f"Webhook error {response.status_code}: {response.text}")
             return False
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Network error sending alert: {e}")
+        return False
     except Exception as e:
-        logging.error(f"Failed to send alert: {e}")
+        logging.error(f"Unexpected error sending alert: {e}")
         return False
 
 def monitor_services():
@@ -60,6 +103,21 @@ def monitor_services():
     
     logging.info("🚀 Starting HTTP-based Blue/Green Monitor")
     logging.info(f"Config: ERROR_RATE_THRESHOLD={ERROR_RATE_THRESHOLD}%, WINDOW_SIZE={WINDOW_SIZE}")
+    
+    # Initial webhook test
+    logging.info("Testing webhook configuration...")
+    test_payload = {
+        "text": "🔧 *Blue/Green Monitor Started Successfully*\nSystem is now monitoring for failovers and errors.",
+        "username": "Blue-Green Monitor"
+    }
+    try:
+        test_response = requests.post(SLACK_WEBHOOK_URL, json=test_payload, timeout=5)
+        if test_response.status_code == 200:
+            logging.info("✅ Webhook test successful")
+        else:
+            logging.warning(f"⚠️ Webhook test returned {test_response.status_code}")
+    except Exception as e:
+        logging.warning(f"⚠️ Webhook test failed: {e}")
     
     while True:
         try:
@@ -76,11 +134,12 @@ def monitor_services():
             
             # Detect failover
             if current_pool and new_pool != current_pool and new_pool != 'unknown':
-                message = f"Failover detected: *{current_pool}* → *{new_pool}*\n"
-                message += f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                message += f"Total requests monitored: {request_count}"
-                if send_slack_alert(message):
+                message = f"Traffic automatically switched from *{current_pool}* to *{new_pool}*\n"
+                message += f"All client requests are now being served by the {new_pool} pool"
+                if send_slack_alert(message, "failover"):
                     logging.info(f"📊 Failover detected: {current_pool} → {new_pool}")
+                else:
+                    logging.warning(f"Failed to send failover alert: {current_pool} → {new_pool}")
             
             current_pool = new_pool
             
@@ -88,11 +147,11 @@ def monitor_services():
             if len(error_window) >= 10:  # Minimum sample size
                 error_rate = (sum(error_window) / len(error_window)) * 100
                 if error_rate > ERROR_RATE_THRESHOLD:
-                    message = f"High error rate detected: *{error_rate:.1f}%* (threshold: {ERROR_RATE_THRESHOLD}%)\n"
+                    message = f"Error rate has exceeded threshold: *{error_rate:.1f}%* (threshold: {ERROR_RATE_THRESHOLD}%)\n"
                     message += f"Sample size: {len(error_window)} requests\n"
-                    message += f"Current pool: {current_pool}"
-                    if send_slack_alert(message):
-                        logging.info(f"⚠️ Error rate alert: {error_rate:.1f}%")
+                    message += f"Immediate investigation recommended"
+                    if send_slack_alert(message, "error_rate"):
+                        logging.info(f"⚠️ Error rate alert sent: {error_rate:.1f}%")
                         error_window.clear()  # Reset after alert
             
             # Log status periodically
@@ -112,5 +171,6 @@ def monitor_services():
 
 if __name__ == '__main__':
     setup_logging()
+    logging.info("🔧 Initializing Blue/Green Alert Monitor...")
     time.sleep(15)  # Wait for all services to start
     monitor_services()
