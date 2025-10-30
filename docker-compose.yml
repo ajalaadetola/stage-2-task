@@ -38,10 +38,11 @@ services:
   alert_watcher:
     build: ./alert_watcher
     environment:
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - ERROR_RATE_THRESHOLD=${ERROR_RATE_THRESHOLD}
-      - WINDOW_SIZE=${WINDOW_SIZE}
-      - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC}
+    - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+    - ERROR_RATE_THRESHOLD=${ERROR_RATE_THRESHOLD}
+    - WINDOW_SIZE=${WINDOW_SIZE}
+    - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC}
+    - NGINX_TARGET=${NGINX_TARGET}
     volumes:
       - nginx_logs:/var/log/nginx
     depends_on:
