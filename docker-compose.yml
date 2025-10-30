@@ -1,15 +1,11 @@
-version: "3.9"
-
 services:
   nginx:
     build: ./nginx
     ports:
-      - "${PORT}:80"
+      - "8080:80"  # Hardcode for now to avoid .env issues
     environment:
       - PORT=80
-      - ACTIVE_POOL=${ACTIVE_POOL}
-      - BLUE_UPSTREAM=app_blue:3000
-      - GREEN_UPSTREAM=app_green:3000
+      - ACTIVE_POOL=blue
     depends_on:
       - app_blue
       - app_green
@@ -20,25 +16,25 @@ services:
     restart: unless-stopped
 
   app_blue:
-    image: ${BLUE_IMAGE}
+    image: yimikaade/wonderful:devops-stage-two
     environment:
-      - RELEASE_ID=${RELEASE_ID_BLUE}
+      - RELEASE_ID=blue-release-1.0
       - APP_POOL=blue
       - PORT=3000
     ports:
-      - "${BLUE_PORT}:3000"
+      - "8081:3000"
     networks:
       - app-network
     restart: unless-stopped
 
   app_green:
-    image: ${GREEN_IMAGE}
+    image: yimikaade/wonderful:devops-stage-two
     environment:
-      - RELEASE_ID=${RELEASE_ID_GREEN}
+      - RELEASE_ID=green-release-1.0
       - APP_POOL=green
       - PORT=3000
     ports:
-      - "${GREEN_PORT}:3000"
+      - "8082:3000"
     networks:
       - app-network
     restart: unless-stopped
@@ -47,10 +43,10 @@ services:
     build: ./alert_watcher
     environment:
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - ERROR_RATE_THRESHOLD=${ERROR_RATE_THRESHOLD}
-      - WINDOW_SIZE=${WINDOW_SIZE}
-      - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC}
-      - NGINX_TARGET=http://nginx:80/version
+      - ERROR_RATE_THRESHOLD=2
+      - WINDOW_SIZE=200
+      - ALERT_COOLDOWN_SEC=300
+      - NGINX_TARGET=http://nginx:80/version  # Fixed port 80
     volumes:
       - nginx_logs:/var/log/nginx
     depends_on:
