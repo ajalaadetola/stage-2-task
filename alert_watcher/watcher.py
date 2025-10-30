@@ -12,9 +12,7 @@ SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
 ERROR_RATE_THRESHOLD = float(os.getenv('ERROR_RATE_THRESHOLD', 2.0))
 WINDOW_SIZE = int(os.getenv('WINDOW_SIZE', 200))
 ALERT_COOLDOWN_SEC = int(os.getenv('ALERT_COOLDOWN_SEC', 300))
-NGINX_HOST = os.getenv('NGINX_HOST', 'nginx')
-NGINX_PORT = int(os.getenv('NGINX_PORT', 8080))
-
+NGINX_TARGET = os.getenv('NGINX_TARGET', 'http://nginx:80/version')
 # ==============================
 # 🧠 State
 # ==============================
