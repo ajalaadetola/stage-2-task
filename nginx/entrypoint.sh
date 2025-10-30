@@ -14,8 +14,8 @@ export BACKUP_POOL
 
 echo "BACKUP_POOL set to: $BACKUP_POOL"
 
-# Substitute environment variables
-envsubst '${PORT},${ACTIVE_POOL} ${BACKUP_POOL}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+# Substitute environment variables (use SPACES, not commas)
+envsubst '${PORT} ${ACTIVE_POOL} ${BACKUP_POOL}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 echo "Nginx configuration completed:"
 echo "Active: app_${ACTIVE_POOL}:3000"
