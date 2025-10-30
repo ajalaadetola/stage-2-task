@@ -16,15 +16,11 @@ http {
                           'uri=$request_uri|'
                           'client_ip=$remote_addr';
 
-    # Log to actual file (not stdout)
     access_log /var/log/nginx/access.log blue_green;
 
-    upstream blue {
-        server app_blue:3000;
-    }
-
-    upstream green {
-        server app_green:3000;
+    upstream app_backend {
+        server app_${ACTIVE_POOL}:3000 max_fails=2 fail_timeout=3s;
+        server app_${BACKUP_POOL}:3000 backup;
     }
 
     server {
@@ -37,7 +33,7 @@ http {
         }
 
         location / {
-            proxy_pass http://${ACTIVE_POOL};
+            proxy_pass http://app_backend;
             proxy_connect_timeout 2s;
             proxy_send_timeout 3s;
             proxy_read_timeout 3s;
