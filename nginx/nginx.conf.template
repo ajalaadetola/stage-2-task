@@ -3,7 +3,9 @@ events {
 }
 
 http {
-    # Custom log format with Blue/Green observability
+    # --------------------------------------------------
+    # 📊 Custom log format for Blue/Green observability
+    # --------------------------------------------------
     log_format blue_green 'time=$time_iso8601|'
                           'pool=$upstream_http_x_app_pool|'
                           'release=$upstream_http_x_release_id|'
@@ -17,28 +19,34 @@ http {
                           'client_ip=$remote_addr';
 
     access_log /var/log/nginx/access.log blue_green;
-    error_log /var/log/nginx/error.log blue_green;
+    error_log /var/log/nginx/error.log;
 
-    # Upstream configuration for Blue/Green deployment
-    # =================================================
+    # --------------------------------------------------
+    # 🔁 Blue/Green Upstream Configuration
+    # --------------------------------------------------
     upstream app_backend {
+        # Primary pool
         server app_blue:3000 max_fails=1 fail_timeout=3s;
+        # Backup pool (used on failure)
         server app_green:3000 backup;
-
-    upstream app_backend {
-        server app_green:3000 max_fails=1 fail_timeout=3s;
-        server app_blue:3000 backup;
     }
 
     server {
         listen 80;
-        
-        # Health check endpoint for alert_watcher
+
+        # --------------------------------------------------
+        # 🧠 Health Check Endpoint
+        # --------------------------------------------------
         location /version {
             add_header Content-Type text/plain;
-            return 200 "nginx-blue-green-1.0\n";
+            # Send which pool is active based on upstream header
+            proxy_pass http://app_backend/version;
+            proxy_set_header X-App-Pool $upstream_addr;
         }
 
+        # --------------------------------------------------
+        # 🔁 App Traffic Routing
+        # --------------------------------------------------
         location / {
             proxy_pass http://app_backend;
             proxy_set_header Host $host;
@@ -46,7 +54,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
 
-            # ✅ Forward headers as-is (don't overwrite)
+            # ✅ Propagate original upstream headers for observability
             proxy_pass_request_headers on;
 
             proxy_connect_timeout 2s;
@@ -55,6 +63,9 @@ http {
             proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
         }
 
+        # --------------------------------------------------
+        # ⚠️ Manual Failure Simulation (for tests)
+        # --------------------------------------------------
         location /fail {
             return 500 "Simulated server error";
         }
