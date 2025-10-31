@@ -19,14 +19,14 @@ http {
     access_log /var/log/nginx/access.log blue_green;
 
     # Upstream configuration for Blue/Green deployment
-# =================================================
-upstream app_backend {
-    server app_blue:8081 max_fails=1 fail_timeout=3s;
-    server app_green:8082 backup;
-}
+    # =================================================
+    upstream app_backend {
+        server app_blue:3000 max_fails=1 fail_timeout=3s;
+        server app_green:3000 backup;
+    }
 
-server {
-    listen 80;
+    server {
+        listen 80;
         
         # Health check endpoint for alert_watcher
         location /version {
@@ -35,22 +35,23 @@ server {
         }
 
         location / {
-        proxy_pass http://app_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_pass http://app_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
 
-        # ✅ Forward headers as-is (don’t overwrite)
-        proxy_pass_request_headers on;
+            # ✅ Forward headers as-is (don't overwrite)
+            proxy_pass_request_headers on;
 
-        proxy_connect_timeout 2s;
-        proxy_send_timeout 5s;
-        proxy_read_timeout 5s;
-        proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
-    }
+            proxy_connect_timeout 2s;
+            proxy_send_timeout 5s;
+            proxy_read_timeout 5s;
+            proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+        }
 
-    location /fail {
-	return 500 "Simulated server error";
+        location /fail {
+            return 500 "Simulated server error";
+        }
     }
 }
