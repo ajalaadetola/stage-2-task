@@ -17,12 +17,17 @@ http {
                           'client_ip=$remote_addr';
 
     access_log /var/log/nginx/access.log blue_green;
+    error_log /var/log/nginx/error.log blue_green;
 
     # Upstream configuration for Blue/Green deployment
     # =================================================
     upstream app_backend {
         server app_blue:3000 max_fails=1 fail_timeout=3s;
         server app_green:3000 backup;
+
+    upstream app_backend {
+        server app_green:3000 max_fails=1 fail_timeout=3s;
+        server app_blue:3000 backup;
     }
 
     server {
