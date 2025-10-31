@@ -1,232 +1,157 @@
-# 🧭 Blue/Green Deployment Alert Runbook
+## 🏃 Blue-Green Deployment Runbook (Stage 3 - HNG13)
 
-## 📘 Overview
-This runbook provides guidance for responding to alerts from the **Blue/Green deployment monitoring system**.  
-The system monitors traffic routing between blue and green environments and alerts on **failovers** and **error rate thresholds**.
+### 1️⃣ Overview
+This runbook provides step-by-step instructions for deploying, monitoring, and troubleshooting the **Blue/Green service** behind **Nginx** with automatic failover, manual toggle, and Slack-based alerts.
 
 ---
 
-## ⚠️ Alert Types
+### 2️⃣ Environment Setup
 
-### 1. 🚨 Failover Detected
-**Severity**: Warning  
-**Description**: Traffic has automatically switched between blue and green deployment pools.
+1. **Clone the repository**
+```bash
+git clone <your_repo_url>
+cd stage-3-task
+```
 
-#### **Alert Format**
+2. **Create `.env` file**
+```bash
+cp .env.example .env
+```
+- Ensure variables are correctly set, e.g., `NGINX_TARGET`, `SLACK_WEBHOOK_URL`, `ERROR_RATE_THRESHOLD`, `WINDOW_SIZE`, `ALERT_COOLDOWN_SEC`.
 
-🚨 Failover detected: blue → green
-Failover detected at 2025-10-30T19:35:22.123456Z
-Window=15, errors=2 (13.33%)
-Release: green-1.0.0
-Upstream status: 500, 200
-Upstream addr: 172.18.0.2:3000, 172.18.0.3:3000
+3. **Pull Docker images**
+```bash
+docker pull yimikaade/wonderful:devops-stage-two
+```
 
-#### **What This Means**
-- The system detected a change in the active deployment pool.  
-- This is typically an automated response to health checks or manual configuration changes.  
-- The failover mechanism is working as designed.
+4. **Start Docker Compose stack**
+```bash
+docker compose up -d
+```
 
-#### **Operator Actions**
+---
 
-1. ✅ **Verify Intentionality** – Check if this was a planned deployment
-   ```bash
-   # Check deployment logs
-   docker-compose logs nginx --tail=20
-✅ Monitor Application Health – Ensure the new active pool is healthy
+### 3️⃣ Service Access
+| Component | URL |
+|-----------|-----|
+| Gateway | http://<server_ip>:8080/version |
+| Blue App | http://<server_ip>:8081/version |
+| Green App | http://<server_ip>:8082/version |
 
-bash
-Copy code
-# Test the new active pool
-curl http://localhost:8080/version
-curl http://localhost:8082/  # Green pool direct
-✅ Check Error Rates – Review if failover was triggered by errors
+Check the active pool:
+```bash
+curl -i http://<server_ip>:8080/version
+```
+Response should include `X-App-Pool: blue` initially.
 
-bash
-Copy code
-# Check recent error rates
-docker-compose logs alert_watcher --tail=30 | grep "Error rate"
-✅ Update Documentation – Note the failover time and reason.
+---
 
-💡 No Immediate Action Required if this was a planned failover.
+### 4️⃣ Monitoring & Alerts
 
-When to Escalate
-Unplanned failovers during peak traffic
+**Watcher (`watcher.py`)** monitors error rates and pool distribution, sending alerts to Slack.
 
-Multiple rapid failovers (thrashing)
+**Steps:**
+1. Ensure `.env` has `SLACK_WEBHOOK_URL` configured.
+2. Run watcher inside your environment:
+```bash
+python3 watcher.py
+```
+3. The watcher logs requests, pool changes, and triggers alerts when error rate exceeds `ERROR_RATE_THRESHOLD`.
 
-Failover to an unhealthy pool
+**Alert format on Slack:**
+```
+:fire: High Error Rate Detected!
+Error rate exceeded threshold: 6.0% (limit 2.0%)
+Time: 2025-10-30 21:41:09
+Current Pool: blue
+Requests Monitored: 64
+Recommended Action: Inspect upstream logs or consider switching pools
+```
 
-2. ⚠️ Elevated 5xx Error Rate
-Severity: High
-Description: The error rate for 5xx responses has exceeded the configured threshold (default: 2.0%).
+---
 
-Alert Format
-sql
-Copy code
-⚠️ Elevated 5xx error rate  
-30.00% 5xx over last 10 requests (threshold 2.0%)  
-Current Pool: blue  
-Requests Monitored: 96
-What This Means
-More than 2% of recent requests resulted in server errors (5xx).
+### 5️⃣ Failover Simulation
 
-This could indicate application instability or infrastructure issues.
+1. **Confirm Blue is active:**
+```bash
+curl -i http://<server_ip>:8080/version
+```
+2. **Simulate Blue failure:**
+```bash
+curl -X POST http://<server_ip>:8081/chaos/start?mode=error
+```
+3. **Check Gateway:**
+```bash
+curl -i http://<server_ip>:8080/version
+```
+Should show `X-App-Pool: green`.
+4. **Restore Blue:**
+```bash
+curl -X POST http://<server_ip>:8081/chaos/stop
+curl -i http://<server_ip>:8080/version
+```
 
-The system is experiencing degraded performance.
+---
 
-Operator Actions
-🚨 Immediate Investigation
+### 6️⃣ Nginx Manual Pool Switching
 
-bash
-Copy code
-# Check application logs
-docker-compose logs app_blue --tail=50
-docker-compose logs app_green --tail=50
+1. Edit `.env`:
+```
+ACTIVE_POOL=green
+```
+2. Reload Nginx:
+```bash
+docker exec -it nginx_gateway nginx -s reload
+```
+3. Confirm active pool:
+```bash
+curl -i http://<server_ip>:8080/version
+```
 
-# Check nginx error logs
-docker-compose exec nginx tail -f /var/log/nginx/error.log
-🔍 Identify Error Patterns
+---
 
-bash
-Copy code
-# Check for specific error types
-docker-compose logs alert_watcher | grep "status=5"
+### 7️⃣ Logs
 
-# Monitor real-time traffic
-docker-compose exec nginx tail -f /var/log/nginx/access.log | grep "status=5"
-🛠️ Immediate Mitigation
+- **Nginx access log:** `/var/log/nginx/access.log blue_green
+- **Nginx error log:** `/var/log/nginx/error.log`blue_green
+- **Watcher logs:** stdout of `python3 watcher.py`
 
-bash
-Copy code
-# If errors persist, consider failover
-# Update .env: ACTIVE_POOL=green (or blue)
-docker-compose stop nginx
-docker-compose up -d nginx
-📊 Monitor Recovery
+**Check logs inside container:**
+```bash
+docker exec -it nginx_gateway cat /var/log/nginx/access.log blue_green
+```
 
-bash
-Copy code
-# Watch error rates post-mitigation
-docker-compose logs -f alert_watcher
-📝 Document Incident
+---
 
-Record time of detection
+### 8️⃣ Troubleshooting
 
-Note actions taken
+**Slack alerts not showing:**
+- Ensure `SLACK_WEBHOOK_URL` is correct.
+- Check network connectivity from watcher container.
+- Verify Python `requests` library is installed.
 
-Document root cause when identified
+**Watcher not detecting errors:**
+- Ensure `/fail` endpoint works: `curl -i http://<server_ip>:8080/fail`
+- Confirm `NGINX_TARGET` points to correct gateway URL.
+- Make sure `ERROR_RATE_THRESHOLD` is set low enough for testing.
 
-When to Escalate
-Error rate > 10% for more than 5 minutes
+**Nginx routing issues:**
+- Inspect `nginx.conf.template` and `/etc/nginx/conf.d/default.conf`
+- Test upstreams individually:
+```bash
+curl -i http://<server_ip>:8081/version
+curl -i http://<server_ip>:8082/version
+```
 
-Multiple services affected
+---
 
-Customer impact reported
+### 9️⃣ Cleanup
+```bash
+docker compose down
+```
+Removes containers, networks, and volumes.
 
-🧩 System Components
-Monitoring Architecture
-mathematica
-Copy code
-Nginx (Load Balancer) → Blue/Green Pools → Alert Watcher → Slack
-Key Configuration
-Variable	Description	Default
-ERROR_RATE_THRESHOLD	Alert when error rate exceeds	2.0%
-WINDOW_SIZE	Requests to monitor	200
-ALERT_COOLDOWN_SEC	Prevent alert spam	300s
-ACTIVE_POOL	Current active deployment	blue
+---
 
-Environment Variables
-bash
-Copy code
-ERROR_RATE_THRESHOLD=2.0
-WINDOW_SIZE=200
-ALERT_COOLDOWN_SEC=300
-ACTIVE_POOL=blue
-🧰 Troubleshooting Guide
-1. False Positive Failover Alerts
-Symptoms: Failover alerts when no deployment occurred
-Solution: Check Nginx configuration and header propagation
-
-bash
-Copy code
-curl -v http://localhost:8080/version
-2. High Error Rate During Deployment
-Symptoms: Spikes in error rates during blue/green switches
-Solution: This is normal during cutover; monitor for stabilization.
-
-3. Alert Storm
-Symptoms: Repeated alerts for the same issue
-Solution: Increase cooldown period
-
-bash
-Copy code
-export ALERT_COOLDOWN_SEC=600
-docker-compose restart alert_watcher
-4. Connection Issues Between Services
-Symptoms: “Failed to resolve 'nginx'” errors
-Solution: Restart Docker network and services
-
-bash
-Copy code
-docker-compose down
-docker-compose up -d
-🩺 Maintenance Procedures
-Regular Health Checks
-bash
-Copy code
-# Daily system check
-docker-compose ps
-curl http://localhost:8080/version
-docker-compose logs alert_watcher --tail=10
-Deployment Procedures
-Pre-deployment
-bash
-Copy code
-# Verify current active pool
-curl -s http://localhost:8080/version | grep -o "pool:[a-z]*"
-
-# Check error rates
-docker-compose logs alert_watcher --tail=20 | grep "Error rate"
-During Deployment
-Monitor for expected failover alerts.
-
-Post-deployment
-Verify new pool health and error rates.
-
-🧪 Alert Testing
-Test the alert system monthly:
-
-bash
-Copy code
-# Trigger test failover
-# Update .env with opposite ACTIVE_POOL
-docker-compose stop nginx && docker-compose up -d nginx
-
-# Generate traffic to trigger detection
-for i in {1..10}; do curl http://localhost:8080/version; sleep 1; done
-📞 Contact Information
-Primary On-call: [Team Lead Name]
-
-Secondary: [Backup Engineer Name]
-
-Slack Channel: #deployment-alerts
-
-Escalation Path: [Manager Name] → [Director Name]
-
-🕓 Revision History
-Date	Description
-2025-10-30	Initial runbook creation
-2025-10-30	Added troubleshooting guide and maintenance procedures
-
-✅ Summary
-This runbook provides:
-
-Clear alert explanations – What each alert means in simple terms
-
-Step-by-step procedures – Exactly what operators should do
-
-Command references – Ready-to-use troubleshooting commands
-
-Escalation guidelines – When to call for help
-
-Maintenance procedures – Regular health checks and testing
+**Author:** Adetola Ajala
+**Track:** DevOps — HNG13 Internship
